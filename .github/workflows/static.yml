@@ -73,10 +73,14 @@ jobs:
         run: |
           ls -lh site/rule-providers
 
-      - name: Generate index.html
+      - name: Generate indexes
         run: |
 
           UPDATED=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          #
+          # 生成总站首页
+          #
 
           cat > site/index.html <<EOF
           <!DOCTYPE html>
@@ -90,7 +94,120 @@ jobs:
             <!-- 禁止搜索引擎索引 -->
             <meta name="robots" content="noindex,nofollow">
 
-            <title>Rule Providers</title>
+            <title>Rule Mirror</title>
+
+            <style>
+
+              :root {
+                --bg: #ffffff;
+                --text: #111111;
+                --border: #e5e5e5;
+                --header: #f5f5f5;
+                --link: #0366d6;
+              }
+
+              @media (prefers-color-scheme: dark) {
+
+                :root {
+                  --bg: #0d1117;
+                  --text: #e6edf3;
+                  --border: #30363d;
+                  --header: #161b22;
+                  --link: #58a6ff;
+                }
+              }
+
+              body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: Arial, sans-serif;
+                max-width: 1000px;
+                margin: 40px auto;
+                padding: 20px;
+              }
+
+              h1 {
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 10px;
+              }
+
+              ul {
+                list-style: none;
+                padding: 0;
+              }
+
+              li {
+                margin: 14px 0;
+              }
+
+              a {
+                color: var(--link);
+                text-decoration: none;
+              }
+
+              a:hover {
+                text-decoration: underline;
+              }
+
+            </style>
+
+          </head>
+
+          <body>
+
+            <h1>Rule Mirror</h1>
+
+            <p>Last Updated: ${UPDATED}</p>
+
+            <ul>
+          EOF
+
+          #
+          # 遍历所有分类目录
+          #
+
+          for dir in site/*/; do
+
+            category=$(basename "$dir")
+
+            echo "
+              <li>
+                <a href=\"$category/\">
+                  $category
+                </a>
+              </li>
+            " >> site/index.html
+
+          done
+
+          cat >> site/index.html <<EOF
+
+            </ul>
+
+          </body>
+          </html>
+          EOF
+
+          #
+          # 为每个分类生成 index.html
+          #
+
+          for dir in site/*/; do
+
+            category=$(basename "$dir")
+
+            cat > "$dir/index.html" <<EOF
+          <!DOCTYPE html>
+          <html lang="en">
+
+          <head>
+
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+            <meta name="robots" content="noindex,nofollow">
+
+            <title>${category}</title>
 
             <style>
 
@@ -189,11 +306,13 @@ jobs:
 
           <body>
 
-            <h1>Rule Providers</h1>
+            <h1>${category}</h1>
 
-            <div class="updated">
-              Last Updated: ${UPDATED}
-            </div>
+            <p>
+              <a href="../">← Back</a>
+            </p>
+
+            <p>Last Updated: ${UPDATED}</p>
 
             <table>
 
@@ -205,44 +324,47 @@ jobs:
               </tr>
           EOF
 
-          # 自动排序（按文件名）
-          for file in $(find site/rule-providers -type f | sort); do
+            #
+            # 文件排序
+            #
 
-            filename=$(basename "$file")
+            for file in $(find "$dir" -maxdepth 1 -type f ! -name "index.html" | sort); do
 
-            filesize=$(du -h "$file" | cut -f1)
+              filename=$(basename "$file")
 
-            modified=$(date -u -r "$file" +"%Y-%m-%d %H:%M UTC")
+              filesize=$(du -h "$file" | cut -f1)
 
-            echo "
-              <tr>
+              modified=$(date -u -r "$file" +"%Y-%m-%d %H:%M UTC")
 
-                <td>
-                  <a href=\"rule-providers/$filename\">
-                    $filename
-                  </a>
-                </td>
+              echo "
+                <tr>
 
-                <td>$filesize</td>
+                  <td>
+                    <a href=\"$filename\">
+                      $filename
+                    </a>
+                  </td>
 
-                <td>$modified</td>
+                  <td>$filesize</td>
 
-                <td>
-                  <a
-                    class=\"download-btn\"
-                    href=\"rule-providers/$filename\"
-                    download
-                  >
-                    Download
-                  </a>
-                </td>
+                  <td>$modified</td>
 
-              </tr>
-            " >> site/index.html
+                  <td>
+                    <a
+                      class=\"btn\"
+                      href=\"$filename\"
+                      download
+                    >
+                      Download
+                    </a>
+                  </td>
 
-          done
+                </tr>
+              " >> "$dir/index.html"
 
-          cat >> site/index.html <<EOF
+            done
+
+            cat >> "$dir/index.html" <<EOF
 
             </table>
 
@@ -250,6 +372,7 @@ jobs:
           </html>
           EOF
 
+          done
       # 上传 Pages
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

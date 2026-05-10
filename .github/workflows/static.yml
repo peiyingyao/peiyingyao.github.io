@@ -41,7 +41,7 @@ jobs:
       - name: Prepare site directory
         run: |
           rm -rf site
-          mkdir -p site/rule-providers
+          mkdir -p site
 
       # aria2 并行下载
       - name: Download all categories
@@ -64,7 +64,9 @@ jobs:
               --retry-wait=2 \
               --max-tries=5 \
               --timeout=30 \
-              --auto-file-renaming=false
+              --allow-overwrite=true \
+              --auto-file-renaming=false \
+              --remove-control-file=true
 
           done
 

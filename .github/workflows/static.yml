@@ -1,45 +1,262 @@
-# 用于将静态内容部署到 GitHub Pages 的简单工作流
 name: Deploy static content to Pages
 
 on:
-  # 当 push 到默认分支时运行
   push:
-    branches: ["main"]
+    branches: ['main']
 
-  # Allows you to run this workflow manually from the Actions tab
+  schedule:
+    - cron: '30 6 * * *'
+
   workflow_dispatch:
 
-# 设置 GITHUB_TOKEN 的权限，以允许部署到 GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# 只允许一个并发部署，
-# 会跳过排队中的旧任务，仅保留最新任务。
-# 但不要取消正在执行中的部署，
-# 因为我们希望生产环境部署能够完成。
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: 'pages'
+  cancel-in-progress: true
 
 jobs:
-  # 单个部署任务，因为这里只是做部署
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
+      # 安装 aria2
+      - name: Install aria2
+        run: sudo apt-get update && sudo apt-get install -y aria2
+
+      # 创建目录
+      - name: Prepare site directory
+        run: |
+          rm -rf site
+          mkdir -p site/rule-providers
+
+      # aria2 并行下载
+      - name: Download all categories
+        run: |
+
+          for list in urls/*.txt; do
+
+            category=$(basename "$list" .txt)
+
+            mkdir -p "site/$category"
+
+            echo "Processing category: $category"
+
+            aria2c \
+              --dir="site/$category" \
+              --input-file="$list" \
+              --max-concurrent-downloads=5 \
+              --split=5 \
+              --min-split-size=1M \
+              --retry-wait=2 \
+              --max-tries=5 \
+              --timeout=30 \
+              --auto-file-renaming=false
+
+          done
+
+      # 查看文件
+      - name: List files
+        run: |
+          ls -lh site/rule-providers
+
+      - name: Generate index.html
+        run: |
+
+          UPDATED=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          cat > site/index.html <<EOF
+          <!DOCTYPE html>
+          <html lang="en">
+
+          <head>
+
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+            <!-- 禁止搜索引擎索引 -->
+            <meta name="robots" content="noindex,nofollow">
+
+            <title>Rule Providers</title>
+
+            <style>
+
+              :root {
+                --bg: #ffffff;
+                --text: #111111;
+                --border: #e5e5e5;
+                --header: #f5f5f5;
+                --link: #0366d6;
+                --button: #0366d6;
+                --button-text: #ffffff;
+              }
+
+              @media (prefers-color-scheme: dark) {
+
+                :root {
+                  --bg: #0d1117;
+                  --text: #e6edf3;
+                  --border: #30363d;
+                  --header: #161b22;
+                  --link: #58a6ff;
+                  --button: #238636;
+                  --button-text: #ffffff;
+                }
+              }
+
+              body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: Arial, sans-serif;
+                max-width: 1000px;
+                margin: 40px auto;
+                padding: 20px;
+                line-height: 1.6;
+              }
+
+              h1 {
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 10px;
+              }
+
+              .updated {
+                margin-bottom: 20px;
+                opacity: 0.7;
+              }
+
+              table {
+                width: 100%;
+                border-collapse: collapse;
+              }
+
+              th, td {
+                padding: 14px;
+                border-bottom: 1px solid var(--border);
+                text-align: left;
+              }
+
+              th {
+                background: var(--header);
+              }
+
+              tr:hover {
+                background: rgba(127,127,127,0.08);
+              }
+
+              a {
+                color: var(--link);
+                text-decoration: none;
+              }
+
+              a:hover {
+                text-decoration: underline;
+              }
+
+              .download-btn {
+
+                display: inline-block;
+                padding: 6px 12px;
+                border-radius: 8px;
+
+                background: var(--button);
+                color: var(--button-text);
+
+                font-size: 14px;
+                text-decoration: none;
+              }
+
+              .download-btn:hover {
+                opacity: 0.9;
+                text-decoration: none;
+              }
+
+            </style>
+
+          </head>
+
+          <body>
+
+            <h1>Rule Providers</h1>
+
+            <div class="updated">
+              Last Updated: ${UPDATED}
+            </div>
+
+            <table>
+
+              <tr>
+                <th>File</th>
+                <th>Size</th>
+                <th>Modified</th>
+                <th>Download</th>
+              </tr>
+          EOF
+
+          # 自动排序（按文件名）
+          for file in $(find site/rule-providers -type f | sort); do
+
+            filename=$(basename "$file")
+
+            filesize=$(du -h "$file" | cut -f1)
+
+            modified=$(date -u -r "$file" +"%Y-%m-%d %H:%M UTC")
+
+            echo "
+              <tr>
+
+                <td>
+                  <a href=\"rule-providers/$filename\">
+                    $filename
+                  </a>
+                </td>
+
+                <td>$filesize</td>
+
+                <td>$modified</td>
+
+                <td>
+                  <a
+                    class=\"download-btn\"
+                    href=\"rule-providers/$filename\"
+                    download
+                  >
+                    Download
+                  </a>
+                </td>
+
+              </tr>
+            " >> site/index.html
+
+          done
+
+          cat >> site/index.html <<EOF
+
+            </table>
+
+          </body>
+          </html>
+          EOF
+
+      # 上传 Pages
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          path: './site'
+
+      # 部署
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5

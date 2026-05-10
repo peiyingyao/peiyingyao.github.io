@@ -68,12 +68,9 @@ jobs:
               --auto-file-renaming=false \
               --remove-control-file=true
 
+            # 查看文件
+            ls -lh "site/$category"
           done
-
-      # 查看文件
-      - name: List files
-        run: |
-          ls -lh site/rule-providers
 
       - name: Generate indexes
         run: |

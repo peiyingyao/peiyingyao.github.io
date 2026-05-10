@@ -76,7 +76,7 @@ jobs:
       - name: Generate indexes
         run: |
 
-          UPDATED=$(date -u +"%Y-%m-%d %H:%M UTC")
+          UPDATED=$(TZ='Asia/Shanghai' date +"%Y-%m-%d %H:%M UTC+8")
 
           #
           # 生成总站首页
